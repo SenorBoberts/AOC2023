@@ -1,52 +1,58 @@
-import Text.Parsec 
+import Text.Parsec
 import Text.Parsec.String
+import Data.List
 
-data Races = Races [Int] [Int] deriving (Show)
+data Almanac = Almanac [Int] [[Mapping]] deriving Show -- Almanac [Seeds] [Mappings] 
+data Mapping = Mapping Int Int Int deriving Show  -- Mapping Start Source Size
 
--- Parser 1 
-parseInput :: Parser Races
-parseInput = Races <$> (string "Time:" >> spaces >> many1 (number <* spaces)) <*> (string "Distance:" >> spaces >> many1 (number <* spaces))
+parseAlmanac :: Parser Almanac
+parseAlmanac = Almanac <$> parseSeeds <*> manyTill parseMap (try eof)
+
+parseSeeds :: Parser [Int]
+parseSeeds = string "seeds:" >> space >> number `sepEndBy` space <* newline
+
+parseMap :: Parser [Mapping]
+parseMap = skipName >> newline >> parseMapping `sepEndBy` newline
+
+parseMapping :: Parser Mapping
+parseMapping = Mapping <$> number <* space <*> number <* space <*> number 
+
+skipName :: Parser String 
+skipName = manyTill anyChar (try (char ':'))
 
 number :: Parser Int 
 number = read <$> many1 digit
 
--- Part 1
+-- Part 1 
 
-getDistance :: Int -> Int -> Int -> Bool
-getDistance hold time record = (time - hold) * hold > record
+solve :: Int -> [Mapping] -> Int
+solve s = foldr 
+	(\(Mapping source start size) a -> 
+		if s >= start && s < start + size 
+			then s - start + source 
+			else a) s 
 
-getRace :: Int -> Int -> Int
-getRace time record = foldr (\x a -> if getDistance x time record then a + 1 else a) 0 [0..time] 
-
-getRaces :: [Int] -> [Int] -> Int
-getRaces (x:xs) (y:ys) = getRace x y * getRaces xs ys
-getRaces [] [] = 1
+solveSteps :: Int -> [[Mapping]] -> Int
+solveSteps s [] = s
+solveSteps s (map:mappings) = solveSteps (solve s map) mappings 
 
 -- Part 2 
--- I have no idea why it makes me do this
-getBigRace :: [Int] -> String
-getBigRace = concatMap show
+-- Lets use a million memory 
+processSeeds :: [Int] -> [Int]
+processSeeds [] = []
+processSeeds (x:y:l) = [x..x + y] ++ processSeeds l
 
-getInt :: [Int] -> Int
-getInt i = read (getBigRace i)
+rmdups :: (Ord a) => [a] -> [a]
+rmdups = map head . group . sort
 
-getPart2 :: [Int] -> [Int] -> Int
-getPart2 l1 l2 = getRace2 (getInt l1) (getInt l2)
-
-
-getRaceBot hold time record = if getDistance hold time record then hold else getRaceBot (hold + 1) time record 
-getRaceTop hold time record = if getDistance hold time record then hold else getRaceTop (hold - 1) time record 
-getRace2 time record = getRaceTop time time record - getRaceBot 0 time record + 1 
-
-main = do 
+main = do
 	input <- readFile "day5.txt"
-	let p = case parse parseInput "throwaway.txt" input of 
-		Left e -> error "e"
-		Right (Races l1 l2) -> getRaces l1 l2 
-	print p
-	let p2 = case parse parseInput "throwaway.txt" input of 
-		Left e -> error "e"
-		Right (Races l1 l2) -> getPart2 l1 l2 
-	print p2
+	let (Almanac seeds mappings) = case parse parseAlmanac "throwaway" input of 
+		Left e -> error "error"
+		Right c -> c
+	print $ minimum $ map (`solveSteps` mappings) seeds
 
-	
+	-- Part 2 
+	--print $ length $ processSeeds seeds
+	--print $ length $ rmdups $ processSeeds seeds
+	print $ minimum $ map (`solveSteps` mappings) $ processSeeds seeds
